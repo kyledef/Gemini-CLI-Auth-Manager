@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.1-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.2-brightgreen.svg)
 
 **Gemini CLI Auth Manager** is a lightweight tool designed for the Google Gemini CLI environment. It supports instant multi-account switching, **automatic rotation on quota exhaustion**, and **unified account pool management**!
 
@@ -15,9 +15,11 @@
 
 - **Instant Switching**: Switch between multiple accounts in seconds.
 - **Auto-Backup**: Automatically saves your credentials upon switching.
-- **🆕 Quota Pre-check**: Real-time quota monitoring via Google API, auto-switches before exhaustion.
-- **🆕 Pool Management**: Unified interface to view, add, and remove accounts.
-- **🆕 Interactive Menu**: Visual configuration interface for easy management.
+- **🆕 Native OAuth Login**: One-click browser login to officially authenticate and capture accounts directly to the pool.
+- **🆕 Custom Model Strategy**: Support for regex-based model rotation (e.g., `gemini-2.5.*`).
+- **Quota Pre-check**: Real-time quota monitoring via Google API, auto-switches before exhaustion.
+- **Pool Management**: Unified interface to view, add, and remove accounts.
+- **Interactive Menu**: Visual configuration interface for easy management.
 - **Slash Command**: Seamlessly integrated as `/change` in Gemini CLI.
 
 ---
@@ -63,8 +65,8 @@ gchange menu
 
 # Pool Management
 gchange pool                 # View pool
-gchange pool add             # Add account (interactive)
-gchange pool add user@gmail.com    # Add specific email
+gchange pool login           # Login & capture account (interactive)
+gchange pool login user@gmail.com  # Login specific email
 gchange pool remove 2        # Remove account #2
 gchange pool import ~/creds.json   # Import credentials file
 
@@ -146,9 +148,10 @@ Edit `~/.gemini/auth_config.json`:
 {
   "auto_switch": {
     "enabled": true,
+    "strategy": "custom",
+    "custom_model_pattern": "gemini-2.5.*",
     "threshold": 10,
-    "cache_minutes": 5,
-    "models_to_check": ["gemini-3-pro-preview", "gemini-2.5-pro"]
+    "cache_minutes": 5
   }
 }
 ```
@@ -156,9 +159,10 @@ Edit `~/.gemini/auth_config.json`:
 | Option | Description | Default |
 |--------|-------------|---------|
 | `enabled` | Enable auto-switch | `true` |
+| `strategy` | Switch strategy (`gemini3-first`, `conservative`, `custom`) | `gemini3-first` |
+| `custom_model_pattern` | Regex pattern for custom strategy | `""` |
 | `threshold` | Quota threshold (%) | `10` |
 | `cache_minutes` | Cache duration (min) | `5` |
-| `models_to_check` | Models to monitor | Pro models |
 
 ### Note
 

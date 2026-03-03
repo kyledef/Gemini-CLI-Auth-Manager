@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.1-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.2-brightgreen.svg)
 
 **Gemini CLI 账号管理器** 是一个轻量级且强大的工具，专为 Google Gemini CLI 环境设计。支持多账号秒级切换、**配额预检测自动轮换**、以及**统一号池管理**！
 
@@ -17,9 +17,11 @@
 
 - **一键秒切账号**: 瞬间在多个账号之间切换
 - **自动备份凭证**: 切换时自动保存你的凭据信息
-- **🆕 配额预检测**: 实时检测配额，支持多种策略（耗尽所有/耗尽指定系列）
-- **🆕 号池管理**: 统一查看、添加、删除账号
-- **🆕 交互式菜单**: 可视化配置界面，轻松管理所有设置
+- **🆕 原生 OAuth 登录**: 提供官方级的本地登录体验，一键捕获并保存凭证到号池。
+- **🆕 自定义轮换策略**: 支持使用正则表达式（如 `gemini-2.5.*`）自定义配额监控和模型轮换。
+- **配额预检测**: 实时检测配额，支持多种策略（耗尽所有/耗尽指定系列）
+- **号池管理**: 统一查看、添加、删除账号
+- **交互式菜单**: 可视化配置界面，轻松管理所有设置
 - **完美集成斜杠命令**: 在 Gemini CLI 中作为 `/change` 命令无缝集成
 
 ---
@@ -65,8 +67,8 @@ gchange menu
 
 # 号池管理
 gchange pool                 # 查看号池
-gchange pool add             # 添加账号（交互式）
-gchange pool add user@gmail.com    # 添加指定账号
+gchange pool login           # 登录并捕获新账号（自动打开浏览器）
+gchange pool login user@gmail.com  # 登录指定账号
 gchange pool remove 2        # 删除第 2 个账号
 gchange pool import ~/creds.json   # 导入凭证文件
 
@@ -141,14 +143,14 @@ Account Pool Overview:
   Total: 3 accounts
 ```
 
-### 添加账号
+### 添加账号 (自动捕获)
 
 ```bash
-# 交互式添加
-gchange pool add
+# 交互式添加（自动启动官方登录）
+gchange pool login
 
-# 直接添加
-gchange pool add newuser@gmail.com
+# 直接登录特定账号
+gchange pool login newuser@gmail.com
 ```
 
 ### 删除账号
@@ -195,9 +197,10 @@ BeforeAgent Hook 触发
 {
   "auto_switch": {
     "enabled": true,
+    "strategy": "custom",
+    "custom_model_pattern": "gemini-2.5.*",
     "threshold": 10,
-    "cache_minutes": 5,
-    "models_to_check": ["gemini-3-pro-preview", "gemini-2.5-pro"]
+    "cache_minutes": 5
   }
 }
 ```
@@ -205,9 +208,10 @@ BeforeAgent Hook 触发
 | 选项 | 说明 | 默认值 |
 |------|------|--------|
 | `enabled` | 是否启用自动切换 | `true` |
+| `strategy` | 切换策略 (`gemini3-first`, `conservative`, `custom`) | `gemini3-first` |
+| `custom_model_pattern` | 自定义策略的正则匹配模式 | `""` |
 | `threshold` | 触发切换的配额阈值 (%) | `10` |
 | `cache_minutes` | 配额缓存时间（分钟） | `5` |
-| `models_to_check` | 监控的模型列表 | Pro 模型 |
 
 ### 注意事项
 

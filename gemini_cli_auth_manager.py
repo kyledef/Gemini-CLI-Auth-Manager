@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Gemini CLI Auth Manager v2.1
+Gemini CLI Auth Manager v2.2
 Fast account switching with auto-rotation support for Gemini CLI.
 """
 import json
@@ -77,7 +77,7 @@ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET = _init_oauth_credentials()
 # --- Language Dictionary ---
 LANG = {
     "en": {
-        "title": "GEMINI-CLI-AUTH-MANAGER v2.1",
+        "title": "GEMINI-CLI-AUTH-MANAGER v2.2",
         "subtitle": "Fast Switcher + Auto Rotation | By Besty",
         "status": "STATUS",
         "active": "ACTIVE",
@@ -157,7 +157,7 @@ LANG = {
         "pool_login": "Login to new account (Auto-Capture)"
     },
     "cn": {
-        "title": "GEMINI-CLI 账号管理器 v2.1",
+        "title": "GEMINI-CLI 账号管理器 v2.2",
         "subtitle": "快速切换 + 自动轮换 | By Besty",
         "status": "状态",
         "active": "活跃",
