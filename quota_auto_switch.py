@@ -166,6 +166,22 @@ def should_switch_by_strategy(config, model_usage=None):
             if pattern.match(model) and usage <= threshold:
                 return True
         return False
+        
+    elif strategy == "custom":
+        # Switch when the custom matched model is below threshold
+        custom_pattern_str = auto_switch.get("custom_model_pattern", "")
+        if not custom_pattern_str:
+            return True # Fallback if no pattern set
+            
+        try:
+            pattern = re.compile(custom_pattern_str, re.IGNORECASE)
+            for model, usage in model_usage.items():
+                if pattern.match(model) and usage <= threshold:
+                    return True
+            return False
+        except re.error:
+            # Fallback if invalid regex
+            return True
     
     # Default: switch on any error
     return True
@@ -288,10 +304,13 @@ def main():
                             cmd = [sys.executable, str(restart_script), "--pid", str(target_pid), "--delay", "3"]
                             
                             if sys.platform == "win32":
-                                # Use os.system with 'start' command - most reliable way on Windows
-                                # 'start /b' runs in background without new window for the helper
-                                # The helper itself will use 'start gemini' to open new window
-                                os.system(f'start /b "" "{sys.executable}" "{restart_script}" --pid {target_pid} --delay 3')
+                                # Use subprocess.Popen with creationflags instead of os.system
+                                # DETACHED_PROCESS = 0x00000008, creates process without console
+                                subprocess.Popen(
+                                    [sys.executable, str(restart_script), "--pid", str(target_pid), "--delay", "3"],
+                                    creationflags=0x00000008,
+                                    close_fds=True
+                                )
                             else:
                                 subprocess.Popen(
                                     [sys.executable, str(restart_script), "--pid", str(target_pid), "--delay", "3"],

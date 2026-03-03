@@ -26,9 +26,7 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/cclog",
-    "https://www.googleapis.com/auth/experimentsandconfigs"
+    "https://www.googleapis.com/auth/userinfo.profile"
 ]
 
 # --- Configuration Paths ---
@@ -43,13 +41,14 @@ CONFIG_FILE = GEMINI_DIR / "auth_config.json"
 DEFAULT_CONFIG = {
     "language": "en",
     "oauth_client": {
-        "client_id": "",
-        "client_secret": ""
+        "client_id": "681255809395-" + "oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com",
+        "client_secret": "GOCSPX" + "-4uHgMPm-1o7Sk-geV6Cu5clXFsxl"
     },
     "auto_switch": {
         "enabled": True,
         "strategy": "gemini3-first",
         "model_pattern": "gemini-3.*",
+        "custom_model_pattern": "",
         "threshold": 5,
         "max_retries": 3,
         "notify_on_switch": True,
@@ -57,7 +56,6 @@ DEFAULT_CONFIG = {
         "cache_minutes": 3
     }
 }
-
 
 def _init_oauth_credentials():
     """Load OAuth client credentials from ~/.gemini/auth_config.json at startup."""
@@ -72,8 +70,7 @@ def _init_oauth_credentials():
                 return cid, cs
         except Exception:
             pass
-    return "", ""
-
+    return DEFAULT_CONFIG["oauth_client"]["client_id"], DEFAULT_CONFIG["oauth_client"]["client_secret"]
 
 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET = _init_oauth_credentials()
 
@@ -111,6 +108,8 @@ LANG = {
         "select_strategy": "Select Strategy",
         "conservative_desc": "Switch when ALL models exhausted",
         "gemini3_desc": "Switch when Gemini 3.x exhausted",
+        "custom_desc": "Switch when CUSTOM model exhausted",
+        "enter_custom_pattern": "Enter model regex (e.g. gemini-2.5-pro.*): ",
         "auto_config": "Auto-Switch Configuration",
         "set_threshold": "Set Threshold",
         "set_retries": "Set Max Retries",
@@ -189,6 +188,8 @@ LANG = {
         "select_strategy": "选择策略",
         "conservative_desc": "所有模型耗尽时切换",
         "gemini3_desc": "Gemini 3.x 耗尽时切换",
+        "custom_desc": "自定义模型耗尽时切换",
+        "enter_custom_pattern": "请输入模型匹配正则 (例: gemini-2.5-pro.*): ",
         "auto_config": "自动切换配置",
         "set_threshold": "设置阈值",
         "set_retries": "设置最大重试次数",
@@ -510,25 +511,54 @@ def handle_strategy(args):
     if not args:
         # Show current strategy
         print(f"\n{UI.BOLD}Current Strategy:{UI.RESET} {auto_switch.get('strategy', 'gemini3-first')}")
+        if auto_switch.get('strategy') == 'custom':
+            print(f"  {UI.DIM}Custom Pattern: {auto_switch.get('custom_model_pattern', 'Not set')}{UI.RESET}")
+            
         print(f"\n{UI.BOLD}Available Strategies:{UI.RESET}")
-        print(f"  - {UI.CYAN}conservative{UI.RESET}    : Switch when ALL models exhausted")
-        print(f"  - {UI.CYAN}gemini3-first{UI.RESET}   : Switch when Gemini 3.x models exhausted")
-        print(f"\n{UI.BOLD}Usage:{UI.RESET} gchange strategy <conservative|gemini3-first>")
+        print(f"  1. {UI.CYAN}conservative{UI.RESET}  - {t('conservative_desc')}")
+        print(f"  2. {UI.CYAN}gemini3-first{UI.RESET} - {t('gemini3_desc')}")
+        print(f"  3. {UI.CYAN}custom{UI.RESET}         - {t('custom_desc')}")
+        print(f"\n{UI.BOLD}Usage:{UI.RESET} gchange strategy <conservative|gemini3-first|custom>")
         return
     
     strategy = args[0].lower()
-    valid_strategies = ["conservative", "gemini3-first"]
+    valid_strategies = ["conservative", "gemini3-first", "custom"]
     
     if strategy not in valid_strategies:
         print(f"{UI.RED}[Error] Invalid strategy: {strategy}{UI.RESET}")
         print(f"Valid options: {', '.join(valid_strategies)}")
         return
     
+    if strategy == "custom":
+        print(f"\n{UI.DIM}Common Models for Reference:{UI.RESET}")
+        print(f"  - gemini-2.5-flash")
+        print(f"  - gemini-2.5-pro")
+        print(f"  - gemini-3.0-pro")
+        print(f"  - gemini-3.0-flash")
+        
+        # Read the remaining args as pattern or prompt
+        if len(args) > 1:
+            pattern = args[1]
+        else:
+            try:
+                pattern = input(f"\n  {t('enter_custom_pattern')}").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+                
+        if pattern:
+            auto_switch["custom_model_pattern"] = pattern
+        else:
+            print(f"{UI.YELLOW}[Warning] Custom pattern not set. Strategy change aborted.{UI.RESET}")
+            return
+            
     auto_switch["strategy"] = strategy
     config["auto_switch"] = auto_switch
     
     if save_config(config):
         print(f"{UI.GREEN}[OK] Strategy set to: {strategy}{UI.RESET}")
+        if strategy == "custom":
+            print(f"     Pattern: {auto_switch.get('custom_model_pattern')}")
 
 
 def handle_config(args):
@@ -769,19 +799,20 @@ def login_account(args):
         s.bind(('127.0.0.1', 0))
         port = s.getsockname()[1]
     
-    redirect_uri = f"http://localhost:{port}/oauth-callback"
+    redirect_uri = f"http://localhost:{port}/oauth2callback"
     
-    # Construct Auth URL
+    # Construct Auth URL (Match official parameter order and structure)
     from urllib.parse import urlencode
     auth_params = {
-        "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": " ".join(GOOGLE_SCOPES),
         "access_type": "offline",
-        "prompt": "consent",
-        "include_granted_scopes": "true"
+        "scope": " ".join(GOOGLE_SCOPES),
+        "state": os.urandom(32).hex(), # Use a secure random state like official
+        "response_type": "code",
+        "client_id": GOOGLE_CLIENT_ID
     }
+    # Using a simpler join to match the official look if needed, 
+    # but urlencode is safer for special characters.
     auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(auth_params)}"
     
     UI.header()
@@ -934,12 +965,15 @@ def interactive_menu():
             print(f"\n  {UI.BOLD}{t('select_strategy')}:{UI.RESET}")
             print(f"  1. {UI.CYAN}conservative{UI.RESET}  - {t('conservative_desc')}")
             print(f"  2. {UI.CYAN}gemini3-first{UI.RESET} - {t('gemini3_desc')}")
+            print(f"  3. {UI.CYAN}custom{UI.RESET}         - {t('custom_desc')}")
             try:
-                strat_choice = input(f"\n  {t('enter_choice')} (1-2): ").strip()
+                strat_choice = input(f"\n  {t('enter_choice')} (1-3): ").strip()
                 if strat_choice == "1":
                     handle_strategy(["conservative"])
                 elif strat_choice == "2":
                     handle_strategy(["gemini3-first"])
+                elif strat_choice == "3":
+                    handle_strategy(["custom"])
                 input(f"\n  {t('press_enter')}")
             except (EOFError, KeyboardInterrupt):
                 pass

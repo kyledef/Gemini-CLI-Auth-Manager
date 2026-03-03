@@ -33,12 +33,17 @@ def restart_gemini(pid, delay):
     print(f"[Restart Helper] Starting new Gemini CLI...", file=sys.stderr)
     try:
         if sys.platform == "win32":
-            # Start in new window
-            # "start" is a shell command in cmd
-            # We use Popen with shell=True to execute "start ..."
-            # "gemini" command starts the CLI
-            # FORCE FILE STORAGE to avoid keychain issues
-            subprocess.Popen("set GEMINI_FORCE_FILE_STORAGE=true && start gemini", shell=True)
+            # Start in new window securely without shell=True concatenation
+            # Prepare environment
+            env = os.environ.copy()
+            env["GEMINI_FORCE_FILE_STORAGE"] = "true"
+            
+            # Use cmd.exe /c start to open a new terminal window
+            subprocess.Popen(
+                ["cmd.exe", "/c", "start", "gemini"], 
+                env=env,
+                close_fds=True
+            )
         else:
             # Linux/Mac (placeholder, mostly for Windows user)
             subprocess.Popen(["gemini"], start_new_session=True)
