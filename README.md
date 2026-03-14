@@ -1,9 +1,9 @@
 # Gemini CLI Auth Manager
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.2-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.2.1-brightgreen.svg)
 
 **Gemini CLI Auth Manager** is a lightweight tool designed for the Google Gemini CLI environment. It supports instant multi-account switching, **automatic rotation on quota exhaustion**, and **unified account pool management**!
 
@@ -28,14 +28,26 @@
 
 ```bash
 git clone https://github.com/Besty0728/Gemini-CLI-Auth-Manager.git
-cd gemini-auth-manager
-python install.py
+cd Gemini-CLI-Auth-Manager
+uv tool install .
+gchange setup
 ```
 
 ### Dependencies
 
+Managed via `uv`. Run `uv add <package>` to add new dependencies.
+
+### Setup Options
+
 ```bash
-pip install requests
+# Non-interactive setup
+gchange setup -y
+
+# Disable auto-switch hook installation
+gchange setup --no-auto-switch
+
+# Set language explicitly
+gchange setup --lang en
 ```
 
 ### How to Update
@@ -43,7 +55,8 @@ pip install requests
 If you have an older version installed:
 
 1. Run `git pull` to get the latest code.
-2. Run `python install.py` again (Recommended, updates hooks).
+2. Run `uv tool install --reinstall .`.
+3. Run `gchange setup` again to refresh hooks/slash command config.
 
 ---
 

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gemini-cli-auth-manager"
+version = "2.2.1"
+description = "Lightweight tool for instant multi-account switching, automatic rotation, and unified account pool management in Google Gemini CLI."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = [
+    "requests>=2.32.5",
+]
+
+[project.scripts]
+gchange = "gemini_cli_auth_manager:main"
+
+[tool.uv]
+managed = true
+
+[tool.setuptools]
+py-modules = [
+    "gemini_cli_auth_manager",
+    "quota_auto_switch",
+    "quota_pre_check",
+    "quota_api_client",
+    "restart_helper",
+    "install",
+]

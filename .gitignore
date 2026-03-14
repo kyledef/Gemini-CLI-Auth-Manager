@@ -12,7 +12,11 @@ __pycache__/
 .venv/
 env/
 .env
+.python-version
 
 # IDE settings
 .vscode/
 .idea/
+
+# Logs
+*.log

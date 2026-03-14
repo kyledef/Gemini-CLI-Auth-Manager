@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = ["requests"]
+# ///
 """
-Gemini CLI Auth Manager v2.2
+Gemini CLI Auth Manager v2.2.1
 Fast account switching with auto-rotation support for Gemini CLI.
 """
 import json
 import os
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import time
 import webbrowser
 import requests
 from pathlib import Path
+from importlib.metadata import PackageNotFoundError, version as pkg_version
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 # --- OAuth Constants ---
-# Client credentials are loaded from ~/.gemini/auth_config.json (written by install.py)
+# Client credentials are loaded from ~/.gemini/auth_config.json.
 GOOGLE_CLIENT_ID = ""
 GOOGLE_CLIENT_SECRET = ""
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -36,6 +41,8 @@ ACCOUNTS_JSON = GEMINI_DIR / "google_accounts.json"
 CREDS_FILE = GEMINI_DIR / "oauth_creds.json"
 ID_FILE = GEMINI_DIR / "google_account_id"
 CONFIG_FILE = GEMINI_DIR / "auth_config.json"
+HOOKS_DIR = GEMINI_DIR / "hooks"
+COMMANDS_DIR = GEMINI_DIR / "commands"
 
 # --- Default Configuration ---
 DEFAULT_CONFIG = {
@@ -77,7 +84,7 @@ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET = _init_oauth_credentials()
 # --- Language Dictionary ---
 LANG = {
     "en": {
-        "title": "GEMINI-CLI-AUTH-MANAGER v2.2",
+        "title": "GEMINI-CLI-AUTH-MANAGER v2.2.1",
         "subtitle": "Fast Switcher + Auto Rotation | By Besty",
         "status": "STATUS",
         "active": "ACTIVE",
@@ -157,7 +164,7 @@ LANG = {
         "pool_login": "Login to new account (Auto-Capture)"
     },
     "cn": {
-        "title": "GEMINI-CLI 账号管理器 v2.2",
+        "title": "GEMINI-CLI 账号管理器 v2.2.1",
         "subtitle": "快速切换 + 自动轮换 | By Besty",
         "status": "状态",
         "active": "活跃",
@@ -296,11 +303,233 @@ def save_config(config):
         return False
 
 
+def get_app_version():
+    """Return installed package version, with source fallback."""
+    package_name = "gemini-cli-auth-manager"
+    try:
+        return pkg_version(package_name)
+    except PackageNotFoundError:
+        pass
+
+    # Fallback when running directly from source tree.
+    pyproject = Path(__file__).resolve().with_name("pyproject.toml")
+    if pyproject.exists():
+        try:
+            with open(pyproject, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("version") and "=" in line:
+                        return line.split("=", 1)[1].strip().strip('"')
+        except Exception:
+            pass
+    return "unknown"
+
+
+def _select_language_interactive():
+    """Prompt user to select language."""
+    print("\nSelect language / 请选择语言")
+    print("1. English")
+    print("2. 中文")
+
+    while True:
+        try:
+            choice = input("Enter number (1/2): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return "en"
+
+        if choice == "1":
+            return "en"
+        if choice == "2":
+            return "cn"
+        print("Invalid selection. Please enter 1 or 2.")
+
+
+def _upsert_hook_entry(settings, hook_group, hook_def, marker):
+    """Insert hook definition into settings if not present."""
+    hooks = settings.setdefault("hooks", {})
+    group = hooks.setdefault(hook_group, [])
+
+    exists = any(
+        marker in h.get("command", "") or h.get("name") == hook_def["name"]
+        for entry in group
+        for h in entry.get("hooks", [])
+    )
+    if not exists:
+        group.append({"matcher": "*", "hooks": [hook_def]})
+
+
+def _update_gemini_settings(hook_python, after_agent_hook, before_agent_hook=None):
+    """Update ~/.gemini/settings.json with hook commands."""
+    settings_file = GEMINI_DIR / "settings.json"
+    settings = {}
+
+    if settings_file.exists():
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        except Exception:
+            settings = {}
+
+    after_hook = {
+        "name": "quota-auto-switch",
+        "type": "command",
+        "command": f'{hook_python} {shlex.quote(after_agent_hook.as_posix())}',
+        "timeout": 10000,
+        "description": "Auto-switch account when quota exhausted",
+    }
+    _upsert_hook_entry(settings, "AfterAgent", after_hook, "quota_auto_switch")
+
+    if before_agent_hook and before_agent_hook.exists():
+        before_hook = {
+            "name": "quota-pre-check",
+            "type": "command",
+            "command": f'{hook_python} {shlex.quote(before_agent_hook.as_posix())}',
+            "timeout": 10000,
+            "description": "Pre-check and switch if last request failed",
+        }
+        _upsert_hook_entry(settings, "BeforeAgent", before_hook, "quota_pre_check")
+
+    with open(settings_file, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+
+
+def run_setup(args):
+    """Initialize Gemini integration without install.py."""
+    explicit_auto = None
+    no_prompt = False
+    requested_lang = None
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ["-y", "--yes"]:
+            no_prompt = True
+        elif arg == "--auto-switch":
+            explicit_auto = True
+        elif arg == "--no-auto-switch":
+            explicit_auto = False
+        elif arg == "--lang":
+            if i + 1 >= len(args):
+                print(f"{UI.RED}[Error] --lang requires a value: en or cn.{UI.RESET}")
+                return
+            requested_lang = args[i + 1].lower()
+            i += 1
+        else:
+            print(f"{UI.YELLOW}[Warning] Unknown setup option ignored: {arg}{UI.RESET}")
+        i += 1
+
+    if requested_lang and requested_lang not in ["en", "cn"]:
+        print(f"{UI.RED}[Error] Invalid language: {requested_lang}. Use en or cn.{UI.RESET}")
+        return
+
+    GEMINI_DIR.mkdir(parents=True, exist_ok=True)
+    HOOKS_DIR.mkdir(parents=True, exist_ok=True)
+    COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
+    PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+
+    config = load_config()
+    lang = requested_lang or config.get("language")
+    if not lang:
+        lang = "en" if no_prompt else _select_language_interactive()
+    config["language"] = lang
+
+    if explicit_auto is None:
+        if no_prompt:
+            enable_auto = True
+        else:
+            prompt = "Enable auto-switch when quota exhausted? (Y/n): "
+            if lang == "cn":
+                prompt = "是否启用配额耗尽自动切换功能？(Y/n): "
+            try:
+                answer = input(prompt).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                answer = ""
+            enable_auto = answer in ["", "y", "yes", "是"]
+    else:
+        enable_auto = explicit_auto
+
+    source_dir = Path(__file__).resolve().parent
+    target_hook = HOOKS_DIR / "quota_auto_switch.py"
+    target_pre_check = HOOKS_DIR / "quota_pre_check.py"
+    target_helper = GEMINI_DIR / "restart_helper.py"
+    target_toml = COMMANDS_DIR / "change.toml"
+
+    # Ensure oauth client defaults exist for native login flow.
+    oauth_cfg = config.get("oauth_client", {})
+    if not oauth_cfg.get("client_id") or not oauth_cfg.get("client_secret"):
+        config["oauth_client"] = DEFAULT_CONFIG["oauth_client"]
+
+    if "auto_switch" not in config:
+        config["auto_switch"] = DEFAULT_CONFIG["auto_switch"].copy()
+
+    config["auto_switch"]["enabled"] = enable_auto
+    if save_config(config):
+        print(f"{UI.GREEN}[OK] Config saved: {CONFIG_FILE}{UI.RESET}")
+
+    toml_content = (
+        "description = \"Switch Gemini accounts. Usage: /change <index_or_email|next|strategy|config>\"\n"
+        "prompt = \"!{gchange {{args}}}\"\n"
+    )
+    with open(target_toml, "w", encoding="utf-8") as f:
+        f.write(toml_content)
+    print(f"{UI.GREEN}[OK] Slash command configured: /change{UI.RESET}")
+
+    if enable_auto:
+        for name, target in [
+            ("quota_auto_switch.py", target_hook),
+            ("quota_pre_check.py", target_pre_check),
+            ("restart_helper.py", target_helper),
+        ]:
+            src = source_dir / name
+            if src.exists():
+                shutil.copy2(src, target)
+                print(f"{UI.GREEN}[OK] Installed: {target.name}{UI.RESET}")
+            else:
+                print(f"{UI.YELLOW}[Warning] Missing packaged file: {name}{UI.RESET}")
+
+        hook_python = shlex.quote(sys.executable)
+        try:
+            _update_gemini_settings(hook_python, target_hook, target_pre_check)
+            print(f"{UI.GREEN}[OK] Gemini hooks updated in settings.json{UI.RESET}")
+        except Exception as e:
+            print(f"{UI.RED}[Error] Failed to update settings.json: {e}{UI.RESET}")
+    else:
+        print(f"{UI.DIM}[Info] Auto-switch hook installation skipped.{UI.RESET}")
+
+    print(f"{UI.CYAN}\nSetup complete.{UI.RESET}")
+    print("Next steps:")
+    print("  1) Run gchange")
+    print("  2) Add/login accounts with: gchange pool login")
+
+
 def get_profiles():
     """Get sorted list of profile names."""
+    _ensure_active_profile_snapshot()
     if not PROFILES_DIR.exists():
         return []
     return sorted([d.name for d in PROFILES_DIR.iterdir() if d.is_dir()])
+
+
+def _ensure_active_profile_snapshot():
+    """Keep active account state and profile directories in sync."""
+    active = get_active_account()
+    if not active or not CREDS_FILE.exists():
+        return
+
+    target_dir = PROFILES_DIR / active
+    target_creds = target_dir / "oauth_creds.json"
+    if target_creds.exists():
+        return
+
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(CREDS_FILE, target_creds)
+        if ID_FILE.exists():
+            shutil.copy2(ID_FILE, target_dir / "google_account_id")
+    except OSError:
+        # Non-fatal: listing profiles should still work even if snapshot fails.
+        return
 
 
 def get_active_account():
@@ -500,6 +729,7 @@ def list_status():
     print(f"  gchange pool               Manage account pool")
     print(f"  gchange strategy [name]    View/set strategy")
     print(f"  gchange config [key] [val] View/set config")
+    print(f"  gchange setup              Initialize Gemini hooks + /change")
     print(f"\n{UI.CYAN}{UI.line('=')}{UI.RESET}\n")
 
 
@@ -981,11 +1211,10 @@ def interactive_menu():
         elif choice == "4":
             # View current quota
             try:
-                # Use subprocess to run independent script to avoid scope pollution
-                subprocess.run(
-                    ["python", str(GEMINI_DIR / "quota_api_client.py")], 
-                    check=False
-                )
+                script_path = Path(__file__).resolve().parent / "quota_api_client.py"
+                if not script_path.exists():
+                    script_path = GEMINI_DIR / "quota_api_client.py"
+                subprocess.run([sys.executable, str(script_path)], check=False)
             except Exception as e:
                 print(f"{UI.RED}[Error] Failed to run quota check: {e}{UI.RESET}")
             input(f"\n  {t('press_enter')}")
@@ -1094,10 +1323,14 @@ def main():
         handle_strategy(args)
     elif command == "config":
         handle_config(args)
+    elif command == "setup":
+        run_setup(args)
     elif command in ["list", "-l"]:
         list_status()
     elif command in ["help", "-h", "--help"]:
         list_status()
+    elif command in ["version", "-v", "-V", "--version"]:
+        print(get_app_version())
     else:
         # Treat as account identifier
         fast_switch(command)

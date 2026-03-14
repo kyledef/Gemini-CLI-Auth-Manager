@@ -1,9 +1,9 @@
 # Gemini CLI 账号管理器
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-yellow.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Version](https://img.shields.io/badge/version-2.2-brightgreen.svg)
+![Version](https://img.shields.io/badge/version-2.2.1-brightgreen.svg)
 
 **Gemini CLI 账号管理器** 是一个轻量级且强大的工具，专为 Google Gemini CLI 环境设计。支持多账号秒级切换、**配额预检测自动轮换**、以及**统一号池管理**！
 
@@ -30,14 +30,26 @@
 
 ```bash
 git clone https://github.com/Besty0728/Gemini-CLI-Auth-Manager.git
-cd gemini-auth-manager
-python install.py
+cd Gemini-CLI-Auth-Manager
+uv tool install .
+gchange setup
 ```
 
 ### 依赖项
 
+通过 `uv` 管理。运行 `uv add <package>` 来添加新的依赖。
+
+### Setup 可选参数
+
 ```bash
-pip install requests
+# 非交互模式初始化
+gchange setup -y
+
+# 禁用自动切换 Hook
+gchange setup --no-auto-switch
+
+# 显式设置语言
+gchange setup --lang cn
 ```
 
 ### 如何更新
@@ -45,7 +57,8 @@ pip install requests
 如果你已经安装过旧版本，可以通过以下步骤更新：
 
 1. 在项目目录运行 `git pull` 同步最新代码。
-2. 重新运行 `python install.py` 覆盖安装（推荐，可同步最新 Hook 逻辑）。
+2. 运行 `uv tool install --reinstall .`。
+3. 重新运行 `gchange setup` 刷新 Hook 与斜杠命令配置。
 
 ---
 
